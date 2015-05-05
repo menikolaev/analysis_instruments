@@ -1,4 +1,9 @@
-from datetime import datetime
+# coding=utf-8
+from datetime import datetime, time
+import itertools
+import matplotlib as mpl
+from scipy import linalg
+from sklearn import manifold
 import numpy as np
 from pandas.util.testing import DataFrame, Series
 from sklearn.cluster import DBSCAN, MiniBatchKMeans, MeanShift, estimate_bandwidth
@@ -7,6 +12,9 @@ from sklearn.decomposition import PCA
 import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
 import matplotlib.pyplot as plt
+from sklearn.gaussian_process.gaussian_process import l1_cross_distances
+from sklearn.metrics import roc_curve, auc
+from sklearn.mixture import GMM, DPGMM
 from sklearn.preprocessing import StandardScaler
 from implementation.methods import get_data
 from mpl_toolkits.mplot3d import Axes3D
@@ -17,7 +25,79 @@ PARAMETERS = ['payments_count', 'payments_sum', 'number_of_quests', 'overall_tim
               'count_of_sessions']
 
 
+class ProbabilityClusterisation(object):
+    """
+        Probability class for EM algorithm and its realisations
+        Examples:
+            GMM
+            DPGMM
+            VBGMM
+    """
+    def __init__(self, data, *kwargs):
+        self.data = np.array(data)
+        self.classifier = None
+
+    def fit(self, probability_classifier=None):
+        if not probability_classifier:
+            self.classifier = GMM(n_components=5, n_iter=1000, n_init=2)
+        else:
+            self.classifier = probability_classifier
+        self.classifier.fit(self.data)
+        y = self.classifier.predict(self.data)
+        return y
+
+    def plot(self, predicted, title):
+        color_iter = itertools.cycle(['r', 'g', 'b', 'c', 'm'])
+        for i, (mean, covar, color) in enumerate(zip(self.classifier.means_, self.classifier._get_covars(), color_iter)):
+            # v, w = linalg.eigh(covar)
+            # u = w[0] / linalg.norm(w[0])
+            # as the DP will not use every component it has access to
+            # unless it needs it, we shouldn't plot the redundant
+            # components.
+            if not np.any(predicted == i):
+                continue
+            plt.scatter(self.data[predicted == i, 0], self.data[predicted == i, 1], .8, color=color)
+
+            # Plot an ellipse to show the Gaussian component
+            # angle = np.arctan(u[1] / u[0])
+            # angle = 180 * angle / np.pi  # convert to degrees
+            # ell = mpl.patches.Ellipse(mean, v[0], v[1], 180 + angle, color=color)
+            # ell.set_clip_box(splot.bbox)
+            # ell.set_alpha(0.5)
+            # splot.add_artist(ell)
+
+        plt.xlim()
+        plt.ylim()
+        plt.title(title)
+        plt.xticks(())
+        plt.yticks(())
+
+    def estimate(self, columns, predicted=None):
+        print set(predicted)
+        if predicted is None:
+            print DataFrame(self.data, columns=columns).describe()
+        else:
+            for i in set(predicted):
+                print DataFrame(self.data[predicted == i], columns=columns).describe()
+
+    def eval_method(self, method_name=None, **kwargs):
+        func = getattr(self.classifier, method_name)
+        if not func:
+            raise AttributeError(u"Нет атрибута с таким именем")
+
+        return func(**kwargs)
+
+
 class Clusterisation(object):
+    """
+        Non-probability clusterisation class
+        Examples:
+            AglomerativeClusterisation
+            DBSCAN
+            Birch
+            K-Means
+            MiniBatchKMeans
+    """
     def __init__(self, data, raw_rules=None, **kwargs):
         self.data = data
         for key, value in kwargs.iteritems():
@@ -61,9 +141,18 @@ class Clusterisation(object):
         normalised_data = stdcsl.fit_transform(self.cleansed_data)
         cls = classifier
         cls.fit(normalised_data)
-        all_data = np.hstack((stdcsl.inverse_transform(normalised_data), cls.labels_[:, None]))
+        all_data = stdcsl.inverse_transform(normalised_data)
+        if hasattr(cls, 'labels_'):
+            all_data = np.hstack((stdcsl.inverse_transform(normalised_data), cls.labels_[:, None]))
         classified_data = pd.DataFrame(all_data)
         return np.array(classified_data)
+
+    def get_tsne(self):
+        print("Computing t-SNE embedding")
+        tsne = manifold.TSNE(n_components=2, init='pca', random_state=0)
+        trans_data = tsne.fit_transform(self.data).T
+        plt.scatter(trans_data[0], trans_data[1], cmap=plt.cm.rainbow)
+        plt.axis('tight')
 
     def plot(self, classifier=None):
         if not classifier:
@@ -103,17 +192,25 @@ class Clusterisation(object):
 
 
 if '__main__' == __name__:
-    data = get_data()
-    data = data.drop(labels=['payments_count'], axis=1)
+    data, PARAMETERS = get_data()
+    print l1_cross_distances(np.array(data))
+    fpr = [0]*2
+    tpr = [0]*2
+    area = [0]*2
+
+    print str(PARAMETERS)
+    # data = data.drop(labels=['payments_count', 'count_of_sessions', 'number_of_quests', 'count_of_sessions'], axis=1)
     print data.describe()
-    plt.subplot(121)
-    cls = Clusterisation(data, payments_count=0, payments_sum=1, number_of_quests=0, overall_time=0, from_last_session=0,
-                         count_of_sessions=0, raw_rules=[1, 1, 1, 1, 1, 1])
-    cls.plot(MeanShift(min_bin_freq=15, bin_seeding=True))
-    plt.subplot(122)
+    plt.subplot(141)
+    cls = Clusterisation(data, payments_count=1, payments_sum=0, number_of_quests=0, overall_time=0, from_last_session=0,
+                         count_of_sessions=0, raw_rules=[1, 1, 1, 1, 1, 1, 1, 1])
+    # cls.get_tsne()
+    cls.plot(MeanShift(min_bin_freq=4))
+
+    plt.subplot(142)
     time_start = datetime.now()
     cls = Clusterisation(data, payments_count=0, payments_sum=0, number_of_quests=0, overall_time=0, from_last_session=0,
-                         count_of_sessions=0, raw_rules=[1, 1, 1, 1, 1, 1])
+                         count_of_sessions=0, raw_rules=[1, 1, 1, 1, 1, 1, 1, 1])
     cls_data = cls.fit()
     delta_time = datetime.now() - time_start
     print "Time: %s" % str(delta_time.microseconds)
@@ -124,4 +221,35 @@ if '__main__' == __name__:
     for i in xrange(0, 7):
         print len(df[df['class'] == i])
         print df[df['class'] == i].describe()
+
+    plt.subplot(143)
+    pc = ProbabilityClusterisation(data)
+    y = pc.fit()
+    expected = np.array([0 if x > 0 else 1 for x in data['payments_sum']])
+    fpr[0], tpr[0], _ = roc_curve(expected, y)
+    area[0] = auc(fpr[0], tpr[0])
+    pc.plot(y, "GMM")
+
+    plt.subplot(144)
+    pc = ProbabilityClusterisation(data)
+    y = pc.fit(DPGMM(n_components=2, covariance_type='diag', alpha=200,
+                       n_iter=10000, random_state=0))
+    print y
+    expected = np.array([0 if x > 0 else 1 for x in data['payments_sum']])
+    fpr[1], tpr[1], _ = roc_curve(expected, y)
+    area[1] = auc(fpr[1], tpr[1])
+    pc.estimate(list(data.columns), y)
+    pc.plot(y, "DPGMM")
+    plt.show()
+
+    plt.figure()
+    plt.plot(fpr[0], tpr[0], label='ROC curve (area = %0.2f)' % area[0])
+    plt.plot(fpr[1], tpr[1], label='ROC curve (area = %0.2f)' % area[1])
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('DPGMM')
+    plt.legend(loc="lower right")
     plt.show()

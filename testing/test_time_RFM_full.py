@@ -15,7 +15,7 @@ def predict(data, minT, maxT, stp, classifier, plt):
         dt.fit(train[:, :-1], train[:, -1])
         score = dt.score(test[:, :-1], test[:, -1])
         scores.append(score)
-    plt.plot(r[1:-1], scores)
+    plt.plot_probs(r[1:-1], scores)
 
 
 def get_data(data_format='file'):

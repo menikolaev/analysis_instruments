@@ -1,15 +1,17 @@
-from matplotlib.colors import ListedColormap
+# coding=utf-8
+from sklearn import cross_validation, metrics
 from sklearn.cluster import MeanShift
 from sklearn.cross_validation import train_test_split
 from sklearn.decomposition import PCA
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.mixture import GMM, DPGMM
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
-from implementation.clusterisation import Clusterisation
-from implementation.methods import get_data
-from implementation.preprocessing import get_correlations
+from implementation import clusterisation
+from implementation.clusterisation import Clusterisation, ProbabilityClusterisation
+from implementation.methods import get_data, set_RFM_classes
 
 __author__ = 'mihailnikolaev'
 
@@ -23,8 +25,10 @@ class Classifier(object):
         if not self.classifier:
             self.classifier = GradientBoostingClassifier()
 
-        return self.classifier.fit(self.data[:, :-1], self.data[:, -1]) if not len(train_labels) else \
-            self.classifier.fit(train_data, train_labels)
+        if train_labels:
+            return self.classifier.fit(train_data, train_labels)
+        else:
+            return self.classifier.fit(self.data[:, :-1], self.data[:, -1])
 
     def score(self, test_data, test_labels):
         return self.classifier.score(test_data, test_labels)
@@ -64,20 +68,35 @@ class Classifier(object):
 
 
 def main(cls_data):
-    train, test = train_test_split(cls_data, test_size=0.3)
-    classifier = Classifier(train, SVC(C=40, gamma=0))
+    classifier = Classifier(cls_data, GradientBoostingClassifier())
+    classifier.fit()
+    scores = cross_validation.cross_val_score(GradientBoostingClassifier(), cls_data[:, :-1], cls_data[:, -1], cv=20)
+    print scores.mean(), scores.std()
+
+    predicted = classifier.classifier.predict(cls_data[:, :-1])
+    print predicted
+    print cls_data[:, -1]
+    print metrics.classification_report(cls_data[:, -1], predicted)
     classifier.plot()
 
 
 if '__main__' == __name__:
-    data = get_data()
-    cov_matrix = get_correlations(data)
-    for item in cov_matrix:
-        print item
-    data = data.drop(labels=['from_last_session', 'number_of_quests', 'count_of_sessions'], axis=1)
-    cls = Clusterisation(data, payments_count=0, payments_sum=0, number_of_quests=0, overall_time=1,
-                         from_last_session=0,
-                         count_of_sessions=0, raw_rules=[1, 1, 1, 1, 1, 1])
-    cls_data = np.array(cls.fit(MeanShift(min_bin_freq=1, bin_seeding=True)))
+    data, clusterisation.PARAMETERS = get_data()
+    # data = data.drop(labels=['payments_count'], axis=1)
+    # data = data[data.payments_sum >= 1]
+    cls = ProbabilityClusterisation(data)
+    preds = np.array(cls.fit(DPGMM(n_components=5, covariance_type='diag', alpha=10.,
+                       n_iter=10000, random_state=0)))
+    print cls.classifier.score(np.array(data))
+
+    cls_data = np.hstack((cls.data, preds[:, None], ))
+    # cls = Clusterisation(data, payments_count=0, payments_sum=1, number_of_quests=0, overall_time=0,
+    #                      from_last_session=0,
+    #                      count_of_sessions=0, raw_rules=[1, 1, 1, 1, 1, 1, 1, 1])
+    # cls_data = np.array(cls.fit(GMM(n_components=3)))
+    # ses_p = np.array(data)
+    # classes = set_RFM_classes(ses_p, 7, 2)
+    # ses_p = np.array([np.hstack((ses_p[i, :], classes[i])) for i in range(len(classes))])
     main(cls_data)
+
     plt.show()

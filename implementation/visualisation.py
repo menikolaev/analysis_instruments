@@ -1,5 +1,9 @@
-from sklearn.cluster import KMeans
+import itertools
+from sklearn.cluster import KMeans, AgglomerativeClustering, MiniBatchKMeans
 import numpy as np
+from sklearn import metrics
+from implementation.methods import get_data
+import matplotlib.pyplot as pl
 
 __author__ = 'mihailnikolaev'
 
@@ -32,3 +36,37 @@ def plot_cluster(data, plt):
     plt.ylim(y_min, y_max)
     plt.xticks(())
     plt.yticks(())
+
+
+def accurate_clusterisation_statistics():
+    data, PARAMETERS = get_data()
+    # # ----------- K-Means -----------
+    # titles = []
+    # for n_clusters in [x for x in xrange(2, 10)]:
+    #     iterations = []
+    #     for iters in [x for x in xrange(500, 5000, 500)]:
+    #         cls = KMeans(n_clusters, max_iter=iters).fit(data)
+    #         labels = cls.labels_
+    #         iterations.append(metrics.silhouette_score(data, labels, metric='euclidean'))
+    #     print "Num: %d" % n_clusters
+    #     titles.append("Num: %d" % n_clusters)
+    #     pl.plot([x for x in xrange(500, 5000, 500)], iterations)
+    # # pl.legend([x for x in xrange(2, 10)], titles)
+    # pl.show()
+
+    # ------------ AgglomerativeClustering ------------
+    titles = []
+    iterations = []
+    for n_clusters in [x for x in xrange(2, 10)]:
+        cls = AgglomerativeClustering(n_clusters).fit(data)
+        labels = cls.labels_
+        iterations.append(metrics.silhouette_score(data, labels, metric='euclidean'))
+        print "Num: %d" % n_clusters
+        titles.append("Num: %d" % n_clusters)
+    pl.plot([x for x in xrange(2, 10)], iterations)
+    # pl.legend([x for x in xrange(2, 10)], titles)
+    pl.show()
+
+
+if __name__ == '__main__':
+    accurate_clusterisation_statistics()

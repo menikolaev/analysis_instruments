@@ -10,12 +10,14 @@ def get_data(data_format='file'):
         sessions = pd.read_csv('sessions.csv', delimiter=';', names=['id', 'overall_time', 'count_of_sessions', 'from_last_session'])
         payments = pd.read_csv('payments.csv', delimiter=';', names=['id', 'payments_sum', 'payments_count'])
         quests = pd.read_csv('quests.csv', delimiter=';', names=['id', 'number_of_quests'])
-        sessions_labels = sessions.columns
-        payments_labels = payments.columns
         ses = pd.merge(sessions, payments, 'outer')
         ses = pd.merge(ses, quests, 'outer')
         ses = ses.drop(ses.columns[[0]], axis=1)
-        return ses
+        ses['avg_payment'] = pd.Series([x/y for x, y in zip(ses.payments_sum, ses.payments_count)],
+                                 index=ses.index)
+        ses['avg_time_per_ses'] = pd.Series([x/y for x, y in zip(ses.overall_time, ses.count_of_sessions)],
+                                 index=ses.index)
+        return ses, ses.columns
     elif data_format == 'db':
         pass
     else:
@@ -78,4 +80,4 @@ def predict(data, minT, maxT, stp, classifier, plt):
         dt.fit(train[:, :-1], train[:, -1])
         score = dt.score(test[:, :-1], test[:, -1])
         scores.append(score)
-    plt.plot(r[1:-1], scores)
+    plt.plot_probs(r[1:-1], scores)
