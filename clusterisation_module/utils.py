@@ -112,12 +112,15 @@ def correlation_matrix(data, corr_method):
 
 def get_params_matrix(data):
     indexes = data.columns
+    print indexes
     npdata = np.array(data)
     fig, ax = plt.subplots(len(indexes), len(indexes), figsize=(16, 8))
+    plt.subplots_adjust(left=.02, right=.98, bottom=.001, top=.96, wspace=.05,
+                        hspace=.01)
     for i in xrange(len(indexes)):
         for j in xrange(len(indexes)):
             ax[i, j].scatter(npdata[:, i], npdata[:, j], .8)
             ax[i, j].set_xticks([])
             ax[i, j].set_yticks([])
-            ax[i, j].set_xlabel(i)
-            ax[i, j].set_ylabel(j)
+            ax[i, j].set_xlabel(indexes[i])
+            ax[i, j].set_ylabel(indexes[j])
